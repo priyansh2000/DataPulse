@@ -1,0 +1,43 @@
+version: "3.8"
+services:
+  controller:
+    build: ./controller
+    container_name: controller
+    ports:
+      - "8000:8000"
+  worker1:
+    build: ./worker
+    container_name: worker1
+    environment:
+      - CONTROLLER_ADDR=http://controller:8000
+      - NODE_ID=worker1
+      - PORT=8001
+    ports:
+      - "8101:8001"
+  worker2:
+    build: ./worker
+    container_name: worker2
+    environment:
+      - CONTROLLER_ADDR=http://controller:8000
+      - NODE_ID=worker2
+      - PORT=8001
+    ports:
+      - "8201:8001"
+  worker3:
+    build: ./worker
+    container_name: worker3
+    environment:
+      - CONTROLLER_ADDR=http://controller:8000
+      - NODE_ID=worker3
+      - PORT=8001
+    ports:
+      - "8301:8001"
+  worker4:
+    build: ./worker
+    container_name: worker4
+    environment:
+      - CONTROLLER_ADDR=http://controller:8000
+      - NODE_ID=worker4
+      - PORT=8001
+    ports:
+      - "8401:8001"
