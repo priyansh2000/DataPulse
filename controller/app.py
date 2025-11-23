@@ -5,6 +5,7 @@ import time
 import hashlib
 import bisect
 import asyncio
+import httpx
 
 app = FastAPI()
 
@@ -84,12 +85,30 @@ async def all_nodes():
 async def mapping(key: str):
     return {"mapping": get_replicas(key)}
 
+async def notify_failure(node_id: str):
+    async with httpx.AsyncClient() as c:
+        for nid, info in nodes.items():
+            if nid == node_id:
+                continue
+            if info["status"] != "UP":
+                continue
+            url = f"http://{info['host']}:{info['port']}/node_down"
+            data = {"node_id": node_id}
+            try:
+                await c.post(url, json=data, timeout=3)
+            except:
+                pass
+
 async def check_failures():
     while True:
         now = time.time()
+        failed = []
         for nid, info in nodes.items():
-            if now - info["ts"] > timeout:
+            if info["status"] == "UP" and now - info["ts"] > timeout:
                 info["status"] = "DOWN"
+                failed.append(nid)
+        for f in failed:
+            await notify_failure(f)
         await asyncio.sleep(1)
 
 @app.on_event("startup")

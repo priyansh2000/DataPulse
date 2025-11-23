@@ -12,6 +12,7 @@ PORT = int(os.getenv("PORT", "8001"))
 
 app = FastAPI()
 store: Dict[str, str] = {}
+rebalancing = False
 
 class KV(BaseModel):
     key: str
@@ -21,10 +22,16 @@ class RepReq(BaseModel):
     key: str
     value: str
 
+class NodeDownReq(BaseModel):
+    node_id: str
+
+def current_node_id() -> str:
+    return NODE_ID or socket.gethostname()
+
 async def register():
     async with httpx.AsyncClient() as c:
-        host = socket.gethostname()
-        nid = NODE_ID or host
+        nid = current_node_id()
+        host = nid
         req = {"node_id": nid, "host": host, "port": PORT}
         for _ in range(30):
             try:
@@ -34,7 +41,7 @@ async def register():
                 await asyncio.sleep(1)
 
 async def heartbeat():
-    nid = NODE_ID or socket.gethostname()
+    nid = current_node_id()
     data = {"node_id": nid}
     async with httpx.AsyncClient() as c:
         while True:
@@ -70,7 +77,7 @@ async def put(kv: KV):
     store[kv.key] = kv.value
     m = await fetch_mapping(kv.key)
     pid = m[0]["node_id"]
-    nid = NODE_ID or socket.gethostname()
+    nid = current_node_id()
     if pid != nid:
         return {"status": "ok", "role": "non_primary"}
     reps = m[1:]
@@ -89,8 +96,36 @@ async def r(req: RepReq):
     store[req.key] = req.value
     return {"status": "ok"}
 
+async def rebalance_task():
+    global rebalancing
+    nid = current_node_id()
+    items = list(store.items())
+    for k, v in items:
+        kv = KV(key=k, value=v)
+        try:
+            m = await fetch_mapping(k)
+        except:
+            continue
+        for node in m:
+            if node["node_id"] == nid:
+                continue
+            await replicate(node, kv)
+    rebalancing = False
+
+@app.post("/node_down")
+async def node_down(req: NodeDownReq):
+    global rebalancing
+    if not rebalancing:
+        rebalancing = True
+        asyncio.create_task(rebalance_task())
+    return {"status": "ok"}
+
 @app.get("/kv")
 async def get(key: str):
     if key in store:
         return {"found": True, "value": store[key]}
     raise HTTPException(status_code=404, detail="not found")
+
+@app.get("/status")
+async def status():
+    return {"node_id": current_node_id(), "keys": len(store), "rebalancing": rebalancing}
