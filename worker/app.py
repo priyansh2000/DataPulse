@@ -17,75 +17,80 @@ class KV(BaseModel):
     key: str
     value: str
 
-class ReplicateReq(BaseModel):
+class RepReq(BaseModel):
     key: str
     value: str
 
 async def register():
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as c:
         host = socket.gethostname()
         nid = NODE_ID or host
         req = {"node_id": nid, "host": host, "port": PORT}
         for _ in range(30):
             try:
-                await client.post(f"{CONTROLLER}/register", json=req, timeout=5.0)
+                await c.post(f"{CONTROLLER}/register", json=req, timeout=3)
                 return
-            except Exception:
+            except:
                 await asyncio.sleep(1)
 
+async def heartbeat():
+    nid = NODE_ID or socket.gethostname()
+    data = {"node_id": nid}
+    async with httpx.AsyncClient() as c:
+        while True:
+            try:
+                await c.post(f"{CONTROLLER}/heartbeat", json=data, timeout=2)
+            except:
+                pass
+            await asyncio.sleep(1)
+
 @app.on_event("startup")
-async def startup_event():
+async def start():
     asyncio.create_task(register())
+    asyncio.create_task(heartbeat())
 
 async def fetch_mapping(key: str) -> List[Dict]:
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{CONTROLLER}/mapping", params={"key": key}, timeout=5.0)
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{CONTROLLER}/mapping", params={"key": key}, timeout=5)
         r.raise_for_status()
-        data = r.json()
-        return data["mapping"]
+        return r.json()["mapping"]
 
-async def replicate_to_node(node: Dict, kv: KV) -> bool:
+async def replicate(node: Dict, kv: KV) -> bool:
     url = f"http://{node['host']}:{node['port']}/replicate"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as c:
         try:
-            r = await client.post(url, json={"key": kv.key, "value": kv.value}, timeout=3.0)
+            r = await c.post(url, json={"key": kv.key, "value": kv.value}, timeout=3)
             r.raise_for_status()
             return True
-        except Exception:
+        except:
             return False
 
 @app.put("/kv")
-async def put_kv(kv: KV):
+async def put(kv: KV):
     store[kv.key] = kv.value
-    mapping = await fetch_mapping(kv.key)
-    primary = mapping[0]
-    if primary["node_id"] != (NODE_ID or socket.gethostname()):
-        return {"status": "ok", "key": kv.key, "role": "non_primary", "replicas_acked": 1}
-    replicas = mapping[1:]
+    m = await fetch_mapping(kv.key)
+    pid = m[0]["node_id"]
+    nid = NODE_ID or socket.gethostname()
+    if pid != nid:
+        return {"status": "ok", "role": "non_primary"}
+    reps = m[1:]
     acks = 1
-    if replicas:
-        first = replicas[0]
-        ok = await replicate_to_node(first, kv)
-        if ok:
+    if reps:
+        if await replicate(reps[0], kv):
             acks += 1
-    if len(replicas) > 1:
-        second = replicas[1]
-        asyncio.create_task(replicate_to_node(second, kv))
-    if acks < 2 and len(replicas) > 0:
+    if len(reps) > 1:
+        asyncio.create_task(replicate(reps[1], kv))
+    if acks < 2:
         raise HTTPException(status_code=503, detail="quorum not reached")
-    return {"status": "ok", "key": kv.key, "role": "primary", "replicas_acked": acks}
+    return {"status": "ok", "role": "primary", "replicas_acked": acks}
 
 @app.post("/replicate")
-async def replicate(req: ReplicateReq):
+async def r(req: RepReq):
     store[req.key] = req.value
-    return {"status": "ok", "key": req.key}
+    return {"status": "ok"}
 
 @app.get("/kv")
-async def get_kv(key: str):
+async def get(key: str):
     if key in store:
         return {"found": True, "value": store[key]}
-    raise HTTPException(status_code=404, detail="key not found")
-
-@app.get("/status")
-async def status():
-    return {"node_id": NODE_ID or socket.gethostname(), "keys": len(store)}
+    raise HTTPException(status_code=404, detail="not found")
