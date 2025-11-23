@@ -216,7 +216,19 @@ After you create `DEMO.md` and finalize k8s files:
 git add k8s DEMO.md
 git commit -m "docs: add Kubernetes deployment and demo script for distributed KV store"
 ```
+# **📌 Evaluation Points to Mention During Viva**
 
+* Why consistent hashing avoids large remapping
+* Why replication factor = 3
+* Why quorum=2 (availability over consistency)
+* How controller maintains membership
+* How heartbeats detect failures
+* Why rebalancing is needed
+* Why Kubernetes Deployments restart pods by default
+* How failure simulation works using scaling
+* Why Minikube was used (local production-like environment)
+
+---
 ---
 
 

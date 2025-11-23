@@ -243,26 +243,10 @@ curl http://localhost:8401/kv?key=user123
 
 ---
 
-# **📌 Evaluation Points to Mention During Viva**
+# **📌 Author**
 
-* Why consistent hashing avoids large remapping
-* Why replication factor = 3
-* Why quorum=2 (availability over consistency)
-* How controller maintains membership
-* How heartbeats detect failures
-* Why rebalancing is needed
-* Why Kubernetes Deployments restart pods by default
-* How failure simulation works using scaling
-* Why Minikube was used (local production-like environment)
-
----
-
-# **📌 Git Commit for This Stage**
-
-```
-git add README.md DEMO.md
-git commit -m "docs: add complete README and demo instructions for distributed KV system"
-```
+All rights reserved **Priyansh Rai**  
+📧 raipriyansh20@gmail.com
 
 ---
 
