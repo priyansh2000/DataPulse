@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker4
+  namespace: kv-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker4
+  template:
+    metadata:
+      labels:
+        app: worker4
+    spec:
+      containers:
+        - name: worker
+          image: distributed-kv-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONTROLLER_ADDR
+              value: http://controller:8000
+            - name: NODE_ID
+              value: worker4
+            - name: PORT
+              value: "8001"
+          ports:
+            - containerPort: 8001
